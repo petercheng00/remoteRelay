@@ -10,8 +10,8 @@ int relayPin = 12;
 SoftwareSerial bluetooth(bluetoothTx, bluetoothRx);
 
 void setup() {
+    Serial.println("beginsetup");
     Serial.begin(9600);
-    
     bluetooth.begin(115200);
     bluetooth.print("$$$");
     delay(100);
@@ -19,28 +19,34 @@ void setup() {
     bluetooth.begin(9600);
     pinMode(ledPin, OUTPUT);
     pinMode(relayPin, OUTPUT);
+    Serial.println("endsetup");
 }
 
 void loop() {
     if (bluetooth.available())
     {
-        command = bluetooth.readStringUntil('\n');
+        char command = bluetooth.read();
+        Serial.println("received " + command);
+        // enabling relay requires setting pin to low
 	if (command == '1') {
-            digitalWrite(relayPin, HIGH);
-        }
-        else {
             digitalWrite(relayPin, LOW);
+       	    flashSignal();
         }
-	flashSignal();
-	bluetooth.write(digitalRead(relayPin))
+        else if (command == '0') {
+            digitalWrite(relayPin, HIGH);
+            flashSignal();
+        }
+        int returnState = digitalRead(relayPin);
+        Serial.println("sending " + returnState);
+	bluetooth.write(returnState);
     }
 }
 void flashSignal() {
   for (int i = 0; i < 4; ++i)
   {
-    digitalWrite(signalLedPin, HIGH);
+    digitalWrite(ledPin, HIGH);
     delayMicroseconds(500);
-    digitalWrite(signalLedPin,LOW);
+    digitalWrite(ledPin,LOW);
     delayMicroseconds(250);
   }
 }

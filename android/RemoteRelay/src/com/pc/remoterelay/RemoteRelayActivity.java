@@ -105,7 +105,7 @@ public class RemoteRelayActivity extends Activity {
 	}
 	
 	private void scanForDevices() {
-		
+		//todo!
 	}
 	
 	private void disconnect() {

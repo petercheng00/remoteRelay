@@ -28,7 +28,7 @@ public class BluetoothService {
     private static final boolean D = true;
 
     // Randomly generated unique UUID for this application
-	private static final UUID BT_UUID = UUID.fromString("f3e6f8d0-f5d0-11e3-a3ac-0800200c9a66");
+	private static final UUID BT_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
 
     // Member fields
     private final BluetoothAdapter mAdapter;
@@ -50,6 +50,7 @@ public class BluetoothService {
     public static final int MESSAGE_WRITE = 3;
     public static final int MESSAGE_DEVICE_NAME = 4;
     public static final int MESSAGE_TOAST = 5;
+
     /**
      * Key names received from the BluetoothService Handler
      */
@@ -254,6 +255,8 @@ public class BluetoothService {
                 // successful connection or an exception
                 mmSocket.connect();
             } catch (IOException e) {
+            	Log.e(TAG, "something failed");
+            	Log.e(TAG, e.getMessage());
                 // Close the socket
                 try {
                     mmSocket.close();

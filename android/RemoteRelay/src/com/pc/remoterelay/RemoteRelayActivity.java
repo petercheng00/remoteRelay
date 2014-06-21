@@ -2,7 +2,6 @@ package com.pc.remoterelay;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -14,6 +13,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
@@ -21,7 +21,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 public class RemoteRelayActivity extends Activity {
-	
+	private static final String TAG = "RemoteRelayActivity";
 	
 	/**
 	 * Request code for asking Android to enable bluetooth
@@ -47,14 +47,22 @@ public class RemoteRelayActivity extends Activity {
 	/**
 	 * True if relay currently set to on
 	 */
-	private Boolean isRelayOn;
+	private boolean isRelayOn;
 	
 	/**
 	 * Handles bluetooth actions
 	 */
 	private BluetoothAdapter btAdapter;
 	
+	/**
+	 * Currently selected bluetooth device
+	 */
 	private BluetoothDevice btDevice;
+	
+	/**
+	 * Service for bluetooth communication
+	 */
+	private BluetoothService btService;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +75,9 @@ public class RemoteRelayActivity extends Activity {
 		setupBluetooth();
 	}
 	
+	/**
+	 * Select a bluetooth device
+	 */
 	private void selectDevice() {
 		final List<BluetoothDevice> pairedDevices = new ArrayList<BluetoothDevice>();
 		pairedDevices.addAll(btAdapter.getBondedDevices());
@@ -98,12 +109,20 @@ public class RemoteRelayActivity extends Activity {
 	}
 	
 	private void disconnect() {
+		btService.stop();
 		connectButton.setEnabled(true);
 		disconnectButton.setEnabled(false);
 		onoffButton.setEnabled(false);
 	}
+	
+	private void onDisconnected() {
+		connectButton.setEnabled(true);
+		disconnectButton.setEnabled(false);
+		onoffButton.setEnabled(false);		
+	}
 		
 	private void connect() {
+		btService.connect(btDevice);
 		connectButton.setEnabled(false);
 		disconnectButton.setEnabled(false);
 		onoffButton.setEnabled(false);
@@ -111,12 +130,19 @@ public class RemoteRelayActivity extends Activity {
 	
 	private void onConnected() {
 		// get onoff state
+		btService.write("getstate".getBytes());
 		connectButton.setEnabled(false);
 		disconnectButton.setEnabled(true);
 		onoffButton.setEnabled(true);
 	}
 	
 	private void toggleRelay() {
+		if (isRelayOn) {
+			btService.write("0".getBytes());
+		}
+		else {
+			btService.write("1".getBytes());
+		}
 	}
 	
 	private void setupStatus() {
@@ -168,6 +194,7 @@ public class RemoteRelayActivity extends Activity {
         	Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
         	startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
         }
+        btService = new BluetoothService(this, new BTHandler());
 	}
 	
 	
@@ -179,12 +206,14 @@ public class RemoteRelayActivity extends Activity {
             case BluetoothService.MESSAGE_STATE_CHANGE:
                 switch (msg.arg1) {
                 case BluetoothService.STATE_CONNECTED:
+                	onConnected();
                 	btStatus.setTextColor(Color.GREEN);
                     break;
                 case BluetoothService.STATE_CONNECTING:
                 	btStatus.setTextColor(Color.YELLOW);
                     break;
                 case BluetoothService.STATE_NONE:
+                	onDisconnected();
                 	btStatus.setTextColor(Color.RED);
                     break;
                 }
@@ -199,6 +228,19 @@ public class RemoteRelayActivity extends Activity {
                 Toast.makeText(getApplicationContext(), msg.getData().getString(BluetoothService.TOAST),
                                Toast.LENGTH_SHORT).show();
                 break;
+            case BluetoothService.MESSAGE_READ:
+            	byte[] rawdata = new byte[msg.arg1];
+            	System.arraycopy(msg.obj, 0, rawdata, 0, msg.arg1);
+            	String contents = new String(rawdata);
+            	Log.e(TAG, "reading " + contents);
+            	isRelayOn = (contents.equals("1"));
+            	if (isRelayOn) {
+            		onoffButton.setText("Turn Off");
+            	}
+            	else {
+            		onoffButton.setText("Turn On");
+            	}
+            	break;
             }
         }
     };  

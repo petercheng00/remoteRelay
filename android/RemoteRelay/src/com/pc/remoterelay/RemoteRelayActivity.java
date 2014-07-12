@@ -5,6 +5,9 @@ import java.util.List;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.DialogInterface;
@@ -13,6 +16,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -22,6 +26,16 @@ import android.widget.Toast;
 
 public class RemoteRelayActivity extends Activity {
 	private static final String TAG = "RemoteRelayActivity";
+	
+	/**
+	 * Unique identifier for notification 
+	 */
+	private static final int NOTIFICATION_ID = 1111;
+	
+	/**
+	 * Unique broadcast code
+	 */
+	private static final int BROADCAST_CODE = 1212;
 	
 	/**
 	 * Request code for asking Android to enable bluetooth
@@ -55,24 +69,28 @@ public class RemoteRelayActivity extends Activity {
 	private BluetoothAdapter btAdapter;
 	
 	/**
-	 * Currently selected bluetooth device
-	 */
-	private BluetoothDevice btDevice;
-	
-	/**
 	 * Service for bluetooth communication
 	 */
 	private BluetoothService btService;
 	
+	/**
+	 * For setting up notification control
+	 */
+	private NotificationManager notificationManager;
+	
 	@Override
-	protected void onCreate(Bundle savedInstanceState) {
-		super.onCreate(savedInstanceState);
+	protected void onCreate(Bundle state) {
+		super.onCreate(state);
 		setContentView(R.layout.activity_remote_relay);
 		// keep screen on for easier debugging. Perhaps remove later
 		getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+		
+		notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+		
 		setupStatus();
 		setupButtons();
 		setupBluetooth();
+		setupNotification();
 	}
 	
 	/**
@@ -96,18 +114,24 @@ public class RemoteRelayActivity extends Activity {
 					scanForDevices();
 				}
 				else {
-					btDevice = pairedDevices.get(index);
+					btService.setDevice(pairedDevices.get(index));
 				}
-				btStatus.setText(btDevice.getName());
+				btStatus.setText(btService.getDevice().getName());
 			}
 		});
 		builder.create().show();
 	}
 	
+	/**
+	 * Scan for non-paired devices
+	 */
 	private void scanForDevices() {
 		//todo!
 	}
 	
+	/**
+	 * Disconnect bluetooth
+	 */
 	private void disconnect() {
 		btService.stop();
 		connectButton.setEnabled(true);
@@ -115,19 +139,28 @@ public class RemoteRelayActivity extends Activity {
 		onoffButton.setEnabled(false);
 	}
 	
+	/**
+	 * Update views when bluetooth is disconnected
+	 */
 	private void onDisconnected() {
 		connectButton.setEnabled(true);
 		disconnectButton.setEnabled(false);
 		onoffButton.setEnabled(false);		
 	}
 		
+	/**
+	 * Connect to bluetooth
+	 */
 	private void connect() {
-		btService.connect(btDevice);
+		btService.connect();
 		connectButton.setEnabled(false);
 		disconnectButton.setEnabled(false);
 		onoffButton.setEnabled(false);
 	}
 	
+	/**
+	 * Update views when bluetooth is connected
+	 */
 	private void onConnected() {
 		// get onoff state
 		btService.write("getstate".getBytes());
@@ -136,6 +169,9 @@ public class RemoteRelayActivity extends Activity {
 		onoffButton.setEnabled(true);
 	}
 	
+	/**
+	 * Toggle relay state
+	 */
 	private void toggleRelay() {
 		if (isRelayOn) {
 			btService.write("0".getBytes());
@@ -145,6 +181,9 @@ public class RemoteRelayActivity extends Activity {
 		}
 	}
 	
+	/**
+	 * Setup status view
+	 */
 	private void setupStatus() {
 		btStatus = (TextView) this.findViewById(R.id.bt_name);
 		btStatus.setText("No device selected");
@@ -157,6 +196,9 @@ public class RemoteRelayActivity extends Activity {
 		});
 	}
 	
+	/**
+	 * Setup buttons
+	 */
 	private void setupButtons() {
 		connectButton = (Button) this.findViewById(R.id.button_connect);
 		disconnectButton = (Button) this.findViewById(R.id.button_disconnect);
@@ -182,6 +224,10 @@ public class RemoteRelayActivity extends Activity {
 			}
 		});
 	}
+	
+	/**
+	 * Setup bluetooth
+	 */
 	private void setupBluetooth() {
         btAdapter = BluetoothAdapter.getDefaultAdapter();
         // If the adapter is null, then Bluetooth is not supported
@@ -197,7 +243,46 @@ public class RemoteRelayActivity extends Activity {
         btService = new BluetoothService(this, new BTHandler());
 	}
 	
+	/**
+	 * Setup notification controls
+	 * 
+	 * TODO: Notification is way bigger than it needs to be
+	 * move to service
+	 */
+	private void setupNotification() {
+		NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
+		builder.setAutoCancel(false);
+		builder.setDefaults(Notification.DEFAULT_ALL);
+		builder.setWhen(System.currentTimeMillis());
+		builder.setContentTitle("Remote Relay");
+		builder.setSmallIcon(R.drawable.ic_launcher);
+		builder.setTicker("Remote Relay");
+		builder.setPriority(NotificationCompat.PRIORITY_HIGH);
+		builder.setOngoing(true);
+		
+		Intent intent = new Intent(this, RemoteRelayActivity.class);
+		PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+		builder.setContentIntent(pendingIntent);
+
+		Intent offIntent = new Intent(this, BluetoothService.class);
+		offIntent.setAction(BluetoothService.OFF_CODE);
+		PendingIntent offPendingIntent = PendingIntent.getBroadcast(this, BROADCAST_CODE, offIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+		builder.addAction(android.R.drawable.ic_media_pause, "Off", offPendingIntent);
+		Intent onIntent = new Intent(this, BluetoothService.class);
+		onIntent.setAction(BluetoothService.ON_CODE);
+		PendingIntent onPendingIntent = PendingIntent.getBroadcast(this, BROADCAST_CODE, onIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+		builder.addAction(android.R.drawable.ic_media_play, "On", onPendingIntent);
+
+		NotificationManager manager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+		manager.notify(TAG, NOTIFICATION_ID, builder.build());
+	}
 	
+	
+	/**
+	 * Class to respond to bluetooth messages
+	 * @author Peter
+	 *
+	 */
 	private class BTHandler extends Handler
     {
         @Override

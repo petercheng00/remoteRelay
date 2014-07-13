@@ -5,7 +5,9 @@ import java.util.List;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Notification;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -15,6 +17,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -24,6 +27,8 @@ import android.widget.Toast;
 
 public class RemoteRelayActivity extends Activity {
 	private static final String TAG = "RemoteRelayActivity";
+	
+	private static final int NOTIFICATION_CODE = 1111;
 		
 	/**
 	 * Request code for asking Android to enable bluetooth
@@ -55,11 +60,6 @@ public class RemoteRelayActivity extends Activity {
 	 * Handles bluetooth actions
 	 */
 	private BluetoothAdapter btAdapter;
-		
-	/**
-	 * For setting up notification control
-	 */
-	private NotificationManager notificationManager;
 	
 	/**
 	 * Respond to updates from the service
@@ -73,12 +73,11 @@ public class RemoteRelayActivity extends Activity {
 		// keep screen on for easier debugging. Perhaps remove later
 		getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		
-		notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-		
 		setupStatus();
 		setupButtons();
 		setupBluetooth();
 		setupBroadcastReceiver();
+		setupNotification();
 	}
 
 	@Override
@@ -319,5 +318,41 @@ public class RemoteRelayActivity extends Activity {
 				}
 			}
 		};
+	}
+	
+	/**
+	 * Setup notification controls
+	 * 
+	 * TODO: Notification is way bigger than it needs to be
+	 */
+	private void setupNotification() {
+		NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
+		builder.setAutoCancel(false);
+		builder.setDefaults(Notification.DEFAULT_ALL);
+		builder.setWhen(System.currentTimeMillis());
+		builder.setContentTitle("Remote Relay");
+		builder.setSmallIcon(R.drawable.ic_launcher);
+		builder.setTicker("Remote Relay");
+		builder.setPriority(NotificationCompat.PRIORITY_HIGH);
+		builder.setOngoing(true);
+		
+		Intent intent = new Intent(this, RemoteRelayActivity.class);
+		PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+		builder.setContentIntent(pendingIntent);
+		
+		Intent offIntent = new Intent(this, RemoteRelayService.class);
+		offIntent.setAction(RemoteRelayService.ACTION_COMMAND);
+		offIntent.putExtra(RemoteRelayService.KEY_COMMAND, "0");
+		PendingIntent offPendingIntent = PendingIntent.getService(this, 123, offIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+		builder.addAction(android.R.drawable.ic_media_pause, "Off", offPendingIntent);
+		
+		Intent onIntent = new Intent(this, RemoteRelayService.class);
+		onIntent.setAction(RemoteRelayService.ACTION_COMMAND);
+		onIntent.putExtra(RemoteRelayService.KEY_COMMAND, "1");
+		PendingIntent onPendingIntent = PendingIntent.getService(this, 321, onIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+		builder.addAction(android.R.drawable.ic_media_play, "On", onPendingIntent);
+
+		NotificationManager manager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+		manager.notify(TAG, NOTIFICATION_CODE, builder.build());
 	}
 }

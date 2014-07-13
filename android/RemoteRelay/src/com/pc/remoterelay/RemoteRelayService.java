@@ -9,7 +9,10 @@ import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -49,6 +52,11 @@ public class RemoteRelayService extends Service {
 	// Connection threads
 	private ConnectThread connectThread;
 	private ConnectedThread connectedThread;
+	
+	/**
+	 * Buffer only one command while waiting for connection
+	 */
+	private String pendingCommand;
 
 	@Override
 	public IBinder onBind(Intent intent) {
@@ -153,15 +161,21 @@ public class RemoteRelayService extends Service {
      * @param command
      */
     public void sendCommandToDevice(String command) {
-        // Create temporary object
-        ConnectedThread r;
-        // Synchronize a copy of the ConnectedThread
-        synchronized (this) {
-            if (currentState != STATE_CONNECTED) return;
-            r = connectedThread;
-        }
-        // Perform the write unsynchronized
-        r.write(command.getBytes());
+    	if (currentState != STATE_CONNECTED && btDevice != null) {
+    		pendingCommand = command;
+    		connectToDevice();
+    	}
+    	else {
+	        // Create temporary object
+	        ConnectedThread r;
+	        // Synchronize a copy of the ConnectedThread
+	        synchronized (this) {
+	            if (currentState != STATE_CONNECTED) return;
+	            r = connectedThread;
+	        }
+	        // Perform the write unsynchronized
+	        r.write(command.getBytes());
+    	}
     }
 	
     /**
@@ -192,7 +206,13 @@ public class RemoteRelayService extends Service {
         setState(STATE_CONNECTED);
         
         // get current state of relay, which is returned on any request
-        sendCommandToDevice("asdf");
+        if (pendingCommand == null) {
+        	sendCommandToDevice("asdf");
+        }
+        else {
+        	sendCommandToDevice(pendingCommand);
+        	pendingCommand = null;
+        }
         
     }
 	
